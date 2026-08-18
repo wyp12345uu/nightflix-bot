@@ -21,7 +21,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(response_text, parse_mode="Markdown")
 
-if name == "__main__":
+if __name__ == "__main__":
     TOKEN = os.getenv("BOT_TOKEN")
     PORT = int(os.environ.get("PORT", "10000"))
     

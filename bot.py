@@ -6,27 +6,68 @@ from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filte
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+# သင့်ရဲ့ Channel များကို ဤနေရာတွင် ထည့်ပါ (Bot သည် ထို Channel များတွင် Admin ဖြစ်ရပါမည်)
+CHANNEL_MAP = {
+    "@drive": "@nightflixclub",       # ဥပမာ - "@my_drive_channel"
+    "@club": "@nightflixdrive",         # ဥပမာ - "@my_club_channel"
+    "@nightflix": "@nightflixmyanmar" # ဥပမာ - "@my_nightflix_channel"
+}
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    movie_name = update.message.text.strip()
+    message = update.message
+    message_text = message.text or message.caption or ""
     
-    # ပို့လိုက်သော ဇာတ်ကားအပေါ်မူတည်၍ ဇာတ်လမ်းအကျဉ်းနှင့် IMDb Rating ထည့်သွင်းခြင်း
-    response_text = (
-        f"🎬 **{movie_name}**\n\n"
-        f"⭐ IMDb Rating: 8.1 / 10\n\n"
-        f"📖 **ဇာတ်လမ်းအကျဉ်း:**\n"
-        f"ဒီဇာတ်ကားကတော့ စိတ်ဝင်စားစရာကောင်းတဲ့ ဇာတ်အိမ်၊ ထူးခြားတဲ့ ဇာတ်ကွက်တွေနဲ့ ရိုက်ကူးထားပြီး "
-        f"ကြည့်ရှုသူတွေအကြိုက်တွေ့စေမယ့် အကောင်းစား ဇာတ်ကားတစ်ကား ဖြစ်ပါတယ်။ "
-        f"ဇာတ်လမ်းရဲ့ အလှည့်အပြောင်းတွေနဲ့ သရုပ်ဆောင်တွေရဲ့ ပုံဖော်မှုက အထူးကောင်းမွန်ပါတယ်။"
-    )
-    
-    await update.message.reply_text(response_text, parse_mode="Markdown")
+    target_channel = None
+    cleaned_text = message_text
+
+    # စာထဲမှာ ဘယ် Channel ကို ညွှန်ပြထားလဲ စစ်ဆေးခြင်း
+    for keyword, channel_target in CHANNEL_MAP.items():
+        if keyword.lower() in message_text.lower():
+            target_channel = channel_target
+            cleaned_text = message_text.replace(keyword, "").strip()
+            break
+
+    if target_channel:
+        try:
+            # Video ပါလာပါက Forward ပုံစံမဟုတ်ဘဲ သီးသန့် Video အသစ်အနေဖြင့် တင်ပေးခြင်း
+            if message.video:
+                await context.bot.send_video(
+                    chat_id=target_channel,
+                    video=message.video.file_id,
+                    caption=cleaned_text,
+                    parse_mode="Markdown"
+                )
+            # ပုံ (Photo) ပါလာပါက
+            elif message.photo:
+                await context.bot.send_photo(
+                    chat_id=target_channel,
+                    photo=message.photo[-1].file_id,
+                    caption=cleaned_text,
+                    parse_mode="Markdown"
+                )
+            # စာသက်သက် (Review သို့မဟုတ် စာသား) ဖြစ်ပါက
+            else:
+                await context.bot.send_message(
+                    chat_id=target_channel,
+                    text=cleaned_text,
+                    parse_mode="Markdown"
+                )
+            
+            await message.reply_text(f"✅ {target_channel} သို့ အောင်မြင်စွာ တင်ပြီးပါပြီ။")
+        except Exception as e:
+            await message.reply_text(f"❌ ပို့၍မရပါ။ Error: {e}")
+    else:
+        await message.reply_text(
+            "⚠️ ဘယ် Channel တင်ရမလဲ မသိရသေးပါ။\n"
+            "ကျေးဇူးပြု၍ စာ သို့မဟုတ် ဗီဒီယို ပို့သည့်အခါ @drive, @club သို့မဟုတ် @nightflix ထည့်ရေးပေးပါ။"
+        )
 
 if __name__ == "__main__":
     TOKEN = os.getenv("BOT_TOKEN")
     PORT = int(os.environ.get("PORT", "10000"))
     
     app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
+    app.add_handler(MessageHandler(filters.ALL & (~filters.COMMAND), handle_message))
     
     RENDER_EXTERNAL_URL = os.environ.get("RENDER_EXTERNAL_URL")
     
@@ -42,5 +83,4 @@ if __name__ == "__main__":
             drop_pending_updates=True,
         )
     else:
-        logger.info("Starting local polling mode")
         app.run_polling(drop_pending_updates=True)
